@@ -494,179 +494,223 @@ class KeyboardControl(object):
         world.hud.notification("Press 'H' or '?' for help.", seconds=4.0)
 
     def parse_events(self, client, world, clock, sync_mode):
-        if isinstance(self._control, carla.VehicleControl):
-            current_lights = self._lights
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+    """
+    函数功能：解析通过 `pygame` 接收到的各类事件，根据不同的键盘按键按下或松开操作，执行相应的与模拟世界（`world`）相关的交互行为，比如控制车辆、切换地图、改变天气等操作，同时根据当前是否启用自动驾驶等状态来决定是否进一步应用相应的控制操作到模拟世界中的角色（车辆或行人）上。
+
+    参数说明：
+    - `self`：类的实例对象本身，通过它可以访问类的实例属性等信息。
+    - `client`：与CARLA模拟器进行通信的客户端对象，用于执行一些需要和模拟器服务端交互的操作（如启动/停止录制等）。
+    - `world`：代表整个模拟世界的对象，包含了场景中的各种元素（车辆、行人、地图、天气等）以及相关的操作方法，用于操作和改变世界中的各种状态。
+    - `clock`：可能是用于记录时间相关信息的对象，例如获取当前时间等，用于一些操作中基于时间的判断或者控制频率等方面的需求。
+    - `sync_mode`：一个布尔值，表示是否处于同步模式，在某些操作（如切换自动驾驶状态）时可能需要根据这个模式来给出相应的提示或进行不同的处理。
+    """
+    if isinstance(self._control, carla.VehicleControl):
+        current_lights = self._lights
+        # 如果当前的控制对象是车辆控制类型（`carla.VehicleControl`），先将当前的车辆灯光状态保存到 `current_lights` 变量中，后续会根据用户操作来更新这个灯光状态，并在必要时应用到车辆上。
+
+    for event in pygame.event.get():
+        # 遍历通过 `pygame` 获取到的所有事件，根据事件的类型和具体的按键信息来执行相应的操作。
+
+        if event.type == pygame.QUIT:
+            return True
+            # 如果事件类型是 `pygame.QUIT`，表示用户关闭了图形界面窗口，此时直接返回 `True`，可能用于告知调用者程序应该结束运行。
+
+        elif event.type == pygame.KEYUP:
+            # 如果事件类型是键盘按键松开（`KEYUP`），则根据松开的具体按键执行以下不同的操作。
+
+            if self._is_quit_shortcut(event.key):
                 return True
-            elif event.type == pygame.KEYUP:
-                if self._is_quit_shortcut(event.key):
-                    return True
-                elif event.key == K_BACKSPACE:
-                    if self._autopilot_enabled:
-                        world.player.set_autopilot(False)
-                        world.restart()
-                        world.player.set_autopilot(True)
+                # 如果按下的键是定义为退出的快捷键（通过 `_is_quit_shortcut` 方法判断，具体实现未在这段代码中展示），则返回 `True`，同样可能用于告知程序应该结束运行。
+
+            elif event.key == K_BACKSPACE:
+                if self._autopilot_enabled:
+                    world.player.set_autopilot(False)
+                    world.restart()
+                    world.player.set_autopilot(True)
+                else:
+                    world.restart()
+                # 如果按下的是退格键（`K_BACKSPACE`）：
+                # - 若当前处于自动驾驶模式（`_autopilot_enabled` 为 `True`），先关闭车辆的自动驾驶功能，然后重启整个模拟世界（`world.restart()`），最后再重新开启自动驾驶功能，这样做可能是为了重置一些与自动驾驶相关的状态或者场景元素等。
+                # - 若当前未处于自动驾驶模式，则直接重启模拟世界，可能用于重新初始化场景等操作。
+
+            elif event.key == K_F1:
+                world.hud.toggle_info()
+                # 如果按下的是 `F1` 键，调用模拟世界的抬头显示（`hud`）相关方法来切换信息显示的状态，比如显示或隐藏某些辅助信息（具体显示内容由 `toggle_info` 方法内部逻辑决定）。
+
+            elif event.key == K_v and pygame.key.get_mods() & KMOD_SHIFT:
+                world.next_map_layer(reverse=True)
+                # 如果按下的是 `v` 键并且同时按下了 `Shift` 键（通过 `pygame.key.get_mods()` 和 `KMOD_SHIFT` 判断），则调用模拟世界的方法来切换地图图层，且是反向切换（具体如何反向切换由 `next_map_layer` 方法的 `reverse=True` 参数决定）。
+
+            elif event.key == K_v:
+                world.next_map_layer()
+                # 如果只按下了 `v` 键，调用模拟世界的方法按照正常顺序切换地图图层，用于在不同地图图层之间进行切换浏览。
+
+            elif event.key == K_b and pygame.key.get_mods() & KMOD_SHIFT:
+                world.load_map_layer(unload=True)
+                # 如果按下的是 `b` 键并且同时按下了 `Shift` 键，调用模拟世界的方法来加载地图图层，同时传入 `unload=True` 参数，可能表示先卸载当前已加载的图层再进行加载操作（具体逻辑由 `load_map_layer` 方法内部决定）。
+
+            elif event.key == K_b:
+                world.load_map_layer()
+                # 如果只按下了 `b` 键，调用模拟世界的方法来正常加载地图图层，用于将指定的地图图层加载到模拟世界中显示。
+
+            elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
+                world.hud.help.toggle()
+                # 如果按下的是 `h` 键或者按下的是 `/` 键并且同时按下了 `Shift` 键，调用模拟世界抬头显示中帮助信息相关的方法来切换帮助信息的显示状态，方便用户查看或隐藏操作帮助内容。
+
+            elif event.key == K_TAB:
+                world.camera_manager.toggle_camera()
+                # 如果按下的是 `TAB` 键，调用模拟世界的相机管理对象（`camera_manager`）的方法来切换相机视角或者相机模式等（具体切换内容由 `toggle_camera` 方法内部逻辑决定）。
+
+            elif event.key == K_c and pygame.key.get_mods() & KMOD_SHIFT:
+                world.next_weather(reverse=True)
+                # 如果按下的是 `c` 键并且同时按下了 `Shift` 键，调用模拟世界的方法来切换天气状态，且是按照反向顺序切换（比如从晴转阴的反向切换，具体反向切换逻辑由 `next_weather` 方法内部决定）。
+
+            elif event.key == K_c:
+                world.next_weather()
+                # 如果只按下了 `c` 键，调用模拟世界的方法按照正常顺序切换天气状态，用于改变模拟世界中的天气情况，比如从晴天切换到雨天等。
+
+            elif event.key == K_g:
+                world.toggle_radar()
+                # 如果按下的是 `g` 键，调用模拟世界的方法来切换雷达的显示状态，比如显示或隐藏雷达相关的可视化界面（具体操作由 `toggle_radar` 方法内部决定）。
+
+            elif event.key == K_BACKQUOTE:
+                world.camera_manager.next_sensor()
+                # 如果按下的是反引号（`K_BACKQUOTE`）键，调用模拟世界相机管理对象的方法来切换到下一个传感器，可能用于切换不同的车辆传感器（如摄像头、激光雷达等）视角或数据源。
+
+            elif event.key == K_n:
+                world.camera_manager.next_sensor()
+                # 如果按下的是 `n` 键，同样调用模拟世界相机管理对象的方法来切换到下一个传感器，功能与按下反引号键类似，可能是提供了另一种切换传感器的操作方式。
+
+            elif event.key == K_w and (pygame.key.get_mods() & KMOD_CTRL):
+                if world.constant_velocity_enabled:
+                    world.player.disable_constant_velocity()
+                    world.constant_velocity_enabled = False
+                    world.hud.notification("Disabled Constant Velocity Mode")
+                else:
+                    world.player.enable_constant_velocity(carla.Vector3D(17, 0, 0))
+                    world.constant_velocity_enabled = True
+                    world.hud.notification("Enabled Constant Velocity Mode at 60 km/h")
+                # 如果按下的是 `w` 键并且同时按下了 `Ctrl` 键：
+                # - 若当前已经启用了恒定速度模式（`world.constant_velocity_enabled` 为 `True`），则调用车辆对象（`world.player`）的方法来禁用恒定速度模式，同时更新相应的状态变量，并在抬头显示上给出提示信息，表示已禁用该模式。
+                # - 若当前未启用恒定速度模式，则调用车辆对象的方法来启用恒定速度模式，设置速度向量为 `(17, 0, 0)`（可能对应每小时60公里的速度，具体取决于速度单位的设定），更新状态变量，并在抬头显示上给出相应的提示信息，表示已启用该模式及对应的速度。
+
+            elif event.key == K_o:
+                try:
+                    if world.doors_are_open:
+                        world.hud.notification("Closing Doors")
+                        world.doors_are_open = False
+                        world.player.close_door(carla.VehicleDoor.All)
                     else:
-                        world.restart()
-                elif event.key == K_F1:
-                    world.hud.toggle_info()
-                elif event.key == K_v and pygame.key.get_mods() & KMOD_SHIFT:
-                    world.next_map_layer(reverse=True)
-                elif event.key == K_v:
-                    world.next_map_layer()
-                elif event.key == K_b and pygame.key.get_mods() & KMOD_SHIFT:
-                    world.load_map_layer(unload=True)
-                elif event.key == K_b:
-                    world.load_map_layer()
-                elif event.key == K_h or (event.key == K_SLASH and pygame.key.get_mods() & KMOD_SHIFT):
-                    world.hud.help.toggle()
-                elif event.key == K_TAB:
-                    world.camera_manager.toggle_camera()
-                elif event.key == K_c and pygame.key.get_mods() & KMOD_SHIFT:
-                    world.next_weather(reverse=True)
-                elif event.key == K_c:
-                    world.next_weather()
-                elif event.key == K_g:
-                    world.toggle_radar()
-                elif event.key == K_BACKQUOTE:
-                    world.camera_manager.next_sensor()
-                elif event.key == K_n:
-                    world.camera_manager.next_sensor()
-                elif event.key == K_w and (pygame.key.get_mods() & KMOD_CTRL):
-                    if world.constant_velocity_enabled:
-                        world.player.disable_constant_velocity()
-                        world.constant_velocity_enabled = False
-                        world.hud.notification("Disabled Constant Velocity Mode")
-                    else:
-                        world.player.enable_constant_velocity(carla.Vector3D(17, 0, 0))
-                        world.constant_velocity_enabled = True
-                        world.hud.notification("Enabled Constant Velocity Mode at 60 km/h")
-                elif event.key == K_o:
+                        world.hud.notification("Opening doors")
+                        world.doors_are_open = True
+                        world.player.open_door(carla.VehicleDoor.All)
+                except Exception:
+                    pass
+                # 如果按下的是 `o` 键：
+                # - 先尝试执行以下操作，若模拟世界中的车辆门当前是打开状态（`world.doors_are_open` 为 `True`），则在抬头显示上给出提示信息表示正在关门，将开门状态变量设为 `False`，然后调用车辆对象的方法关闭所有车门（`carla.VehicleDoor.All` 表示所有车门）。
+                # - 若车辆门当前是关闭状态，则在抬头显示上给出提示信息表示正在开门，将开门状态变量设为 `True`，并调用车辆对象的方法打开所有车门。若在执行过程中出现异常（比如车门操作不被允许等情况），则直接忽略异常（`pass`），程序继续执行。
+
+            elif event.key == K_t:
+                if world.show_vehicle_telemetry:
+                    world.player.show_debug_telemetry(False)
+                    world.show_vehicle_telemetry = False
+                    world.hud.notification("Disabled Vehicle Telemetry")
+                else:
                     try:
-                        if world.doors_are_open:
-                            world.hud.notification("Closing Doors")
-                            world.doors_are_open = False
-                            world.player.close_door(carla.VehicleDoor.All)
-                        else:
-                            world.hud.notification("Opening doors")
-                            world.doors_are_open = True
-                            world.player.open_door(carla.VehicleDoor.All)
+                        world.player.show_debug_telemetry(True)
+                        world.show_vehicle_telemetry = True
+                        world.hud.notification("Enabled Vehicle Telemetry")
                     except Exception:
                         pass
-                elif event.key == K_t:
-                    if world.show_vehicle_telemetry:
-                        world.player.show_debug_telemetry(False)
-                        world.show_vehicle_telemetry = False
-                        world.hud.notification("Disabled Vehicle Telemetry")
-                    else:
-                        try:
-                            world.player.show_debug_telemetry(True)
-                            world.show_vehicle_telemetry = True
-                            world.hud.notification("Enabled Vehicle Telemetry")
-                        except Exception:
-                            pass
-                elif event.key > K_0 and event.key <= K_9:
-                    index_ctrl = 0
-                    if pygame.key.get_mods() & KMOD_CTRL:
-                        index_ctrl = 9
-                    world.camera_manager.set_sensor(event.key - 1 - K_0 + index_ctrl)
-                elif event.key == K_r and not (pygame.key.get_mods() & KMOD_CTRL):
-                    world.camera_manager.toggle_recording()
-                elif event.key == K_r and (pygame.key.get_mods() & KMOD_CTRL):
-                    if (world.recording_enabled):
-                        client.stop_recorder()
-                        world.recording_enabled = False
-                        world.hud.notification("Recorder is OFF")
-                    else:
-                        client.start_recorder("manual_recording.rec")
-                        world.recording_enabled = True
-                        world.hud.notification("Recorder is ON")
-                elif event.key == K_p and (pygame.key.get_mods() & KMOD_CTRL):
-                    # stop recorder
+                # 如果按下的是 `t` 键：
+                # - 若当前已经显示车辆遥测信息（`world.show_vehicle_telemetry` 为 `True`），则调用车辆对象的方法来关闭车辆的调试遥测信息显示功能，同时更新相应的状态变量，并在抬头显示上给出提示信息，表示已禁用车辆遥测信息显示。
+                # - 若当前未显示车辆遥测信息，则尝试调用车辆对象的方法来启用车辆的调试遥测信息显示功能，若成功则更新状态变量，并在抬头显示上给出提示信息，表示已启用车辆遥测信息显示。若在启用过程中出现异常，则忽略异常，程序继续执行。
+
+            elif event.key > K_0 and event.key <= K_9:
+                index_ctrl = 0
+                if pygame.key.get_mods() & KMOD_CTRL:
+                    index_ctrl = 9
+                world.camera_manager.set_sensor(event.key - 1 - K_0 + index_ctrl)
+                # 如果按下的键是数字键（`K_0` 到 `K_9` 之间）：
+                # - 先判断是否同时按下了 `Ctrl` 键，如果按下了则将 `index_ctrl` 设为 `9`，否则设为 `0`。然后调用模拟世界相机管理对象的方法，根据按下的数字键以及 `index_ctrl` 的值来设置当前要使用的传感器，具体如何根据这些值设置传感器由 `set_sensor` 方法内部逻辑决定。
+
+            elif event.key == K_r and not (pygame.key.get_mods() & KMOD_CTRL):
+                world.camera_manager.toggle_recording()
+                # 如果按下的是 `r` 键并且没有同时按下 `Ctrl` 键，调用模拟世界相机管理对象的方法来切换图像录制功能的状态，比如开始或停止录制传感器获取到的图像数据（具体切换逻辑由 `toggle_recording` 方法内部决定）。
+
+            elif event.key == K_r and (pygame.key.get_mods() & KMOD_CTRL):
+                if (world.recording_enabled):
                     client.stop_recorder()
                     world.recording_enabled = False
-                    # work around to fix camera at start of replaying
-                    current_index = world.camera_manager.index
-                    world.destroy_sensors()
-                    # disable autopilot
-                    self._autopilot_enabled = False
-                    world.player.set_autopilot(self._autopilot_enabled)
-                    world.hud.notification("Replaying file 'manual_recording.rec'")
-                    # replayer
-                    client.replay_file("manual_recording.rec", world.recording_start, 0, 0)
-                    world.camera_manager.set_sensor(current_index)
-                elif event.key == K_MINUS and (pygame.key.get_mods() & KMOD_CTRL):
-                    if pygame.key.get_mods() & KMOD_SHIFT:
-                        world.recording_start -= 10
-                    else:
-                        world.recording_start -= 1
-                    world.hud.notification("Recording start time is %d" % (world.recording_start))
-                elif event.key == K_EQUALS and (pygame.key.get_mods() & KMOD_CTRL):
-                    if pygame.key.get_mods() & KMOD_SHIFT:
-                        world.recording_start += 10
-                    else:
-                        world.recording_start += 1
-                    world.hud.notification("Recording start time is %d" % (world.recording_start))
-                if isinstance(self._control, carla.VehicleControl):
-                    if event.key == K_f:
-                        # Toggle ackermann controller
-                        self._ackermann_enabled = not self._ackermann_enabled
-                        world.hud.show_ackermann_info(self._ackermann_enabled)
-                        world.hud.notification("Ackermann Controller %s" %
-                                               ("Enabled" if self._ackermann_enabled else "Disabled"))
-                    if event.key == K_q:
-                        if not self._ackermann_enabled:
-                            self._control.gear = 1 if self._control.reverse else -1
-                        else:
-                            self._ackermann_reverse *= -1
-                            # Reset ackermann control
-                            self._ackermann_control = carla.VehicleAckermannControl()
-                    elif event.key == K_m:
-                        self._control.manual_gear_shift = not self._control.manual_gear_shift
-                        self._control.gear = world.player.get_control().gear
-                        world.hud.notification('%s Transmission' %
-                                               ('Manual' if self._control.manual_gear_shift else 'Automatic'))
-                    elif self._control.manual_gear_shift and event.key == K_COMMA:
-                        self._control.gear = max(-1, self._control.gear - 1)
-                    elif self._control.manual_gear_shift and event.key == K_PERIOD:
-                        self._control.gear = self._control.gear + 1
-                    elif event.key == K_p and not pygame.key.get_mods() & KMOD_CTRL:
-                        if not self._autopilot_enabled and not sync_mode:
-                            print("WARNING: You are currently in asynchronous mode and could "
-                                  "experience some issues with the traffic simulation")
-                        self._autopilot_enabled = not self._autopilot_enabled
-                        world.player.set_autopilot(self._autopilot_enabled)
-                        world.hud.notification(
-                            'Autopilot %s' % ('On' if self._autopilot_enabled else 'Off'))
-                    elif event.key == K_l and pygame.key.get_mods() & KMOD_CTRL:
-                        current_lights ^= carla.VehicleLightState.Special1
-                    elif event.key == K_l and pygame.key.get_mods() & KMOD_SHIFT:
-                        current_lights ^= carla.VehicleLightState.HighBeam
-                    elif event.key == K_l:
-                        # Use 'L' key to switch between lights:
-                        # closed -> position -> low beam -> fog
-                        if not self._lights & carla.VehicleLightState.Position:
-                            world.hud.notification("Position lights")
-                            current_lights |= carla.VehicleLightState.Position
-                        else:
-                            world.hud.notification("Low beam lights")
-                            current_lights |= carla.VehicleLightState.LowBeam
-                        if self._lights & carla.VehicleLightState.LowBeam:
-                            world.hud.notification("Fog lights")
-                            current_lights |= carla.VehicleLightState.Fog
-                        if self._lights & carla.VehicleLightState.Fog:
-                            world.hud.notification("Lights off")
-                            current_lights ^= carla.VehicleLightState.Position
-                            current_lights ^= carla.VehicleLightState.LowBeam
-                            current_lights ^= carla.VehicleLightState.Fog
-                    elif event.key == K_i:
-                        current_lights ^= carla.VehicleLightState.Interior
-                    elif event.key == K_z:
-                        current_lights ^= carla.VehicleLightState.LeftBlinker
-                    elif event.key == K_x:
-                        current_lights ^= carla.VehicleLightState.RightBlinker
+                    world.hud.notification("Recorder is OFF")
+                else:
+                    client.start_recorder("manual_recording.rec")
+                    world.recording_enabled = True
+                    world.hud.notification("Recorder is ON")
+                # 如果按下的是 `r` 键并且同时按下了 `Ctrl` 键：
+                # - 若当前已经启用了录制功能（`world.recording_enabled` 为 `True`），则通过客户端对象（`client`）调用方法来停止录制，同时更新录制状态变量，并在抬头显示上给出提示信息，表示录制器已关闭。
+                # - 若当前未启用录制功能，则通过客户端对象调用方法来启动录制，将录制文件命名为 `manual_recording.rec`，更新录制状态变量，并在抬头显示上给出提示信息，表示录制器已开启。
 
+            elif event.key == K_p and (pygame.key.get_mods() & KMOD_CTRL):
+                # stop recorder
+                client.stop_recorder()
+                world.recording_enabled = False
+                # work around to fix camera at start of replaying
+                current_index = world.camera_manager.index
+                world.destroy_sensors()
+                # disable autopilot
+                self._autopilot_enabled = False
+                world.player.set_autopilot(self._autopilot_enabled)
+                world.hud.notification("Replaying file 'manual_recording.rec'")
+                # replayer
+                client.replay_file("manual_recording.rec", world.recording_start, 0, 0)
+                world.camera_manager.set_sensor(current_index)
+                # 如果按下的是 `p` 键并且同时按下了 `Ctrl` 键：
+                # - 首先通过客户端对象停止录制功能，将录制状态变量设为 `False`。
+                # - 为了解决在开始回放时相机相关的问题，先获取当前相机管理对象中的相机索引（`world.camera_manager.index`），然后调用模拟世界的方法销毁所有传感器（`world.destroy_sensors()`）。
+                # - 接着关闭车辆的自动驾驶功能，通过车辆对象设置自动驾驶状态为 `False`。
+                # - 在抬头显示上给出提示信息，表示正在回放文件 `manual_recording.rec`。
+                # - 通过客户端对象调用方法来回放指定的录制文件，传入相关的回放参数（`world.recording_start` 等，具体含义由 `replay_file` 方法决定），最后再根据之前保存的相机索引来重新设置相机传感器，确保回放时相机视角等设置正确。
+
+            elif event.key == K_MINUS and (pygame.key.get_mods() & KMOD_CTRL):
+                if pygame.key.get_mods() & KMOD_SHIFT:
+                    world.recording_start -= 10
+                else:
+                    world.recording_start -= 1
+                world.hud.notification("Recording start time is %d" % (world.recording_start))
+                # 如果按下的是减号键（`K_MINUS`）并且同时按下了 `Ctrl` 键：
+                # - 若同时还按下了 `Shift` 键，则将模拟世界中的录制开始时间往前推10秒（`world.recording_start -= 10`），否则往前推1秒（`world.recording_start -= 1`）。
+                # - 最后在抬头显示上给出提示信息，显示当前的录制开始时间。
+
+            elif event.key == K_EQUALS and (pygame.key.get_mods() & KMOD_CTRL):
+                if pygame.key.get_mods() & KMOD_SHIFT:
+                    world.recording_start += 10
+                else:
+                    world.recording_start += 1
+                world.hud.notification("Recording start time is %d" % (world.recording_start))
+                # 如果按下的是等号键（`K_EQUALS`）并且同时按下了 `Ctrl` 键：
+                # - 若同时还按下了 `Shift` 键，则将模拟世界中的录制开始时间往后推10秒（`world.recording_start += 10`），否则往后推1秒（`world.recording_start += 1`）。
+                # - 最后在抬头显示上给出提示信息，显示当前的录制开始时间。
+
+            if isinstance(self._control, carla.VehicleControl):
+                if event.key == K_f:
+                    # Toggle ackermann controller
+                    self._ackermann_enabled = not self._ackermann_enabled
+                    world.hud.show_ackermann_info(self._ackermann_enabled)
+                    world.hud.notification("Ackermann Controller %s" %
+                                           ("Enabled" if self._ackermann_enabled else "Disabled"))
+                    # 如果当前的控制对象是车辆控制类型并且按下的是 `f` 键：
+                    # - 切换阿克曼控制器（`ackermann_controller`）的启用状态，取反当前的 `_ackermann_enabled` 值。
+                    # - 通过模拟世界的抬头显示对象调用方法来显示阿克曼控制器当前的启用状态信息（具体显示方式由 `show_ackermann_info` 方法内部决定），并在抬头显示上给出提示信息，告知用户阿克曼控制器是已启用还是已禁用。
+
+                if event.key == K_q:
+                    if not self._ackermann_enabled:
+                        self._control.gear = 1 if self._control.reverse else -1
+                    else:
+                        self._ackermann_reverse *= -1
+                        # Reset ackermann control
+                        self._ackermann_control = carla.VehicleAckermannControl()
+                    # 如果当前的控制对象是车辆控制类型并且按下的是 `
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
                 self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
